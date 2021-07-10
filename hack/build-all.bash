@@ -44,15 +44,33 @@ mkdir -p "${DEVSPACE_ROOT}/release"
 
 # Install Helm 3
 echo "Installing helm"
-curl -s https://get.helm.sh/helm-v3.3.4-darwin-amd64.tar.gz > helm3.tar.gz && tar -zxvf helm3.tar.gz darwin-amd64/helm && chmod +x darwin-amd64/helm
+ARCH=amd64
+if [ "`uname -m`" = "aarch64" ]; then
+  ARCH=arm64
+fi
+OS=`uname -s`
+case $OS in
+  Darwin)
+    OS=darwin
+    ;;
+  Linux)
+    OS=linux
+    ;;
+  *)
+  echo "Does not support $OS at this moment"
+  exit 1
+esac
+
+
+echo "https://get.helm.sh/helm-v3.3.4-${OS}-${ARCH}.tar.gz"
+curl -s "https://get.helm.sh/helm-v3.3.4-${OS}-${ARCH}.tar.gz" > helm3.tar.gz && tar -zxvf helm3.tar.gz "${OS}-${ARCH}/helm" && chmod +x "${OS}-${ARCH}/helm"
 
 # Pull the component chart
 COMPONENT_CHART_VERSION=$(cat pkg/devspace/deploy/deployer/helm/client.go | grep 'Version: "' | sed -nE 's/[^"]+"(.+)",\s*/\1/p')
-darwin-amd64/helm pull component-chart --repo https://charts.devspace.sh --version $COMPONENT_CHART_VERSION
+${OS}-${ARCH}/helm pull component-chart --repo https://charts.devspace.sh --version $COMPONENT_CHART_VERSION
 
 # Move ui.tar.gz to releases
 echo "Moving ui"
-mv ui.tar.gz "${DEVSPACE_ROOT}/release/ui.tar.gz"
 shasum -a 256 "${DEVSPACE_ROOT}/release/ui.tar.gz" > "${DEVSPACE_ROOT}/release/ui.tar.gz".sha256
 
 # build devspace helper
@@ -86,8 +104,7 @@ for OS in ${DEVSPACE_BUILD_PLATFORMS[@]}; do
     fi
 
     echo "Building for ${OS}/${ARCH}"
-    GOARCH=${ARCH} GOOS=${OS} ${GO_BUILD_CMD} -ldflags "${GO_BUILD_LDFLAGS}"\
-      -o "${DEVSPACE_ROOT}/release/${NAME}" .
+    GOARCH=${ARCH} GOOS=${OS} ${GO_BUILD_CMD} -ldflags "${GO_BUILD_LDFLAGS}" -o "${DEVSPACE_ROOT}/release/${NAME}" .
     shasum -a 256 "${DEVSPACE_ROOT}/release/${NAME}" > "${DEVSPACE_ROOT}/release/${NAME}".sha256
   done
 done
